@@ -274,6 +274,7 @@ footer{text-align:center;color:var(--ink3);font-size:12px;margin-top:26px;line-h
           <h2>测算结果</h2>
           <div class="summary" id="kpis"></div>
           <div class="bars" id="bars"></div>
+          <div id="invoiceInfo" hidden></div>
           <div id="extra"></div>
         </div>
 
@@ -637,6 +638,7 @@ function render(){
   /* 明细条 */
   var paid = P.vatMode === 'paid';
   var netRow = row(paid ? '税后净收益' : '税后到手', f(paid ? d.netIncome : d.net), 'tot');
+  if (paid) netRow += row('企业本次实际打款', f(d.net), 'tot');
   var salesRow = row('不含税销售额', f(d.s));
   var vatName = vatTitle + '（' + fp(d.rate) + '）';
   $('bars').innerHTML = mode === 'rev'
@@ -652,6 +654,16 @@ function render(){
       row(surTitle, P.vatMode==='withhold' ? '− ' + f(shownSur) : f(shownSur)) +
       row('应扣个人所得税', '− ' + f(d.iit)) +
       netRow;
+
+  var invoice = $('invoiceInfo');
+  invoice.hidden = !has;
+  invoice.innerHTML = has
+    ? '<h3>自然人代开发票参考</h3><div class="bars">' +
+      row('价税合计（开票页面填写含税金额）', f(grossShown), 'tot') +
+      row('票面金额（不含增值税）', f(r2(grossShown - d.vatDue))) +
+      row('票面税额（增值税）', f(d.vatDue)) +
+      '</div><p class="hint">按本次业务的全部含税价款开票。若合同约定净到手金额，请先反算并确认合同含税价款。个税和附加税费单独结算。开票前请核对电子税务局预览的金额、税额及价税合计。</p>'
+    : '';
 
   /* 提示 */
   var tip = '';
@@ -745,6 +757,7 @@ $('copyBtn').onclick = function(){
   var t = '【劳务报酬税费测算】\n' +
     '合同含税金额：' + f(lastGross) + ' 元\n' +
     '不含税销售额：' + f(d.s) + ' 元（征收率 ' + fp(d.rate) + '）\n' +
+    '自然人代开发票参考：价税合计 ' + f(lastGross) + ' 元；票面不含税金额 ' + f(r2(lastGross - d.vatDue)) + ' 元；增值税额 ' + f(d.vatDue) + ' 元（以开票预览为准）\n' +
     vatLabel + '：' + f(vatCopy) + ' 元\n' +
     surLabel + '：' + f(surCopy) + ' 元\n' +
     '个税计税收入：' + f(d.income) + ' 元（口径' + P.iitMode + (P.iitMode==='A'?'：扣除附加税费':'：不扣附加税费') + '）\n' +
