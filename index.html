@@ -193,7 +193,7 @@ footer{text-align:center;color:var(--ink3);font-size:12px;margin-top:26px;line-h
   <div class="wrap">
     <div>
       <h1>劳务报酬税费测算器</h1>
-      <div class="sub">增值税 · 附加税费 · 个人所得税 三税联动｜正算与到手反算｜计算过程可逐条追溯</div>
+      <div class="sub">增值税 · 附加税费 · 个人所得税 三税联动｜正算与到账反算｜计算过程可逐条追溯</div>
     </div>
     <div class="badge"><span class="dot"></span>2026年11月1日起施行 · 财政部 税务总局公告2026年第28号</div>
   </div>
@@ -214,7 +214,7 @@ footer{text-align:center;color:var(--ink3);font-size:12px;margin-top:26px;line-h
         <div class="card">
           <div class="seg" id="modeSeg">
             <button class="on" data-mode="fwd">正算 · 合同额 → 到手</button>
-            <button data-mode="rev">反算 · 到手 → 合同额</button>
+            <button data-mode="rev">反算 · 到账 → 合同额</button>
           </div>
 
           <label class="fl" id="inLabel">合同含税金额（支付给自然人的全部价款）</label>
@@ -509,11 +509,11 @@ function calc(gross){
   };
 }
 
-/* 反算：给定到手净额，二分求解含税金额，再按分微调至最接近 */
+/* 反算：给定银行卡到账金额，二分求解含税金额，再按分微调至最接近 */
 function solve(target){
   target = money(target);
   if (target === 0) return 0;
-  var netOf = function(g){ var d = calc(g); return P.vatMode === 'paid' ? d.netIncome : d.net; };
+  var netOf = function(g){ return calc(g).net; };
   var roots = [];
   function addRoot(lo, hi){
     var nlo = netOf(lo), nhi = netOf(hi), i, mid;
@@ -596,7 +596,7 @@ document.querySelectorAll('#modeSeg button').forEach(function(b){
     mode = b.dataset.mode;
     $('inLabel').textContent = mode==='fwd'
       ? '合同含税金额（支付给自然人的全部价款）'
-      : '希望自然人实际到手金额（税后净额）';
+      : '希望自然人银行卡实际到账金额';
     $('gross').value = amountByMode[mode];
     render();
   };
@@ -642,12 +642,11 @@ function render(){
   var salesRow = row('不含税销售额', f(d.s));
   var vatName = vatTitle + '（' + fp(d.rate) + '）';
   $('bars').innerHTML = mode === 'rev'
-    ? netRow +
+    ? (paid ? row('企业本次实际打款', f(d.net), 'tot') : netRow) +
       row('应扣个人所得税', '+ ' + f(d.iit)) +
-      row(surTitle, '+ ' + f(shownSur)) +
-      salesRow +
-      row(vatName, '+ ' + f(shownVat)) +
-      row('合同含税金额（反算得出）', f(grossShown), 'tot')
+      (paid ? '' : row(surTitle, '+ ' + f(shownSur)) + salesRow + row(vatName, '+ ' + f(shownVat))) +
+      row('合同含税金额（反算得出）', f(grossShown), 'tot') +
+      (paid ? row(vatName, f(shownVat)) + row(surTitle, f(shownSur)) + row('税后净收益', f(d.netIncome), 'tot') : '')
     : row('合同含税金额', f(grossShown), 'tot') +
       salesRow +
       row(vatName, P.vatMode==='withhold' ? '− ' + f(shownVat) : f(shownVat)) +
@@ -662,7 +661,14 @@ function render(){
       row('价税合计（开票页面填写含税金额）', f(grossShown), 'tot') +
       row('票面金额（不含增值税）', f(r2(grossShown - d.vatDue))) +
       row('票面税额（增值税）', f(d.vatDue)) +
-      '</div><p class="hint">按本次业务的全部含税价款开票。若合同约定净到手金额，请先反算并确认合同含税价款。个税和附加税费单独结算。开票前请核对电子税务局预览的金额、税额及价税合计。</p>'
+      (mode === 'rev'
+        ? row('反算口径', (paid ? '自然人自行缴纳' : P.vatMode === 'exempt' ? '增值税免征' : '单位代扣') + ' · 口径' + P.iitMode) +
+          row('价税合计算式',
+            f(d.net) + '（实际打款）＋ ' + f(d.iit) + '（个税）' +
+            (P.vatMode === 'withhold' ? ' ＋ ' + f(d.sur) + '（附加）＋ ' + f(d.vat) + '（增值税）' : '') +
+            ' ＝ ' + f(grossShown) + ' 元')
+        : '') +
+      '</div><p class="hint">按本次业务的全部含税价款开票。若约定银行卡到账金额，可先反算并确认合同含税价款。个税和附加税费单独结算。开票前请核对电子税务局预览的金额、税额及价税合计。</p>'
     : '';
 
   /* 提示 */
@@ -679,7 +685,7 @@ function render(){
 
   /* 计算过程 */
   var st = [], n = 1;
-  st.push(step(n++, '确定含税金额', mode==='rev' ? ('反算：由到手 ' + f(raw) + ' 元逐档逼近，得含税金额 <b>' + f(grossShown) + '</b> 元') : ('含税金额 <b>' + f(grossShown) + '</b> 元'), ''));
+  st.push(step(n++, '确定含税金额', mode==='rev' ? ('反算：由目标银行卡到账 ' + f(raw) + ' 元逐档逼近，得含税金额 <b>' + f(grossShown) + '</b> 元') : ('含税金额 <b>' + f(grossShown) + '</b> 元'), ''));
   st.push(step(n++, '换算不含税销售额',
     f(grossShown) + ' ÷ (1 + ' + fp(d.rate) + ') = <b>' + f(d.s) + '</b> 元', '销售额 = 含税销售额 ÷ (1 + 征收率)'));
   st.push(step(n++, '判断按次起征点',
